@@ -71,6 +71,49 @@ Or install globally in `~/.config/opencode/opencode.json`:
 }
 ```
 
+## OpenCode Configuration for AnyRouter
+
+Use either project-level `opencode.json` or global `~/.config/opencode/opencode.json`.
+
+### Minimal working config
+
+```json
+{
+  "plugin": [
+    "./opencode-anthropic-tool-name-transformer.mjs"
+  ],
+  "anthropic": {
+    "options": {
+      "baseURL": "https://anyrouter.top/v1",
+      "apiKey": "sk-",
+      "headers": { "Authorization": "Bearer sk-" }
+    }
+  }
+}
+```
+
+### Full config example
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": [
+    "opencode-anyrouter-cc"
+  ],
+  "anthropic": {
+    "options": {
+      "baseURL": "https://anyrouter.top/v1",
+      "apiKey": "sk-your-anyrouter-key",
+      "headers": {
+        "Authorization": "Bearer sk-your-anyrouter-key"
+      }
+    }
+  }
+}
+```
+
+> If you use a local plugin file, replace `"opencode-anyrouter-cc"` with your relative path (for example `"./opencode-anthropic-tool-name-transformer.mjs"`).
+
 ## Development
 
 ```bash

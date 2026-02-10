@@ -71,6 +71,49 @@ cp dist/index.js ~/.config/opencode/plugins/opencode-anyrouter-cc.js
 }
 ```
 
+## AnyRouter 接入配置（OpenCode）
+
+可配置在项目级 `opencode.json`，或全局 `~/.config/opencode/opencode.json`。
+
+### 最小可用配置
+
+```json
+{
+  "plugin": [
+    "./opencode-anthropic-tool-name-transformer.mjs"
+  ],
+  "anthropic": {
+    "options": {
+      "baseURL": "https://anyrouter.top/v1",
+      "apiKey": "sk-",
+      "headers": { "Authorization": "Bearer sk-" }
+    }
+  }
+}
+```
+
+### 完整配置示例
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": [
+    "opencode-anyrouter-cc"
+  ],
+  "anthropic": {
+    "options": {
+      "baseURL": "https://anyrouter.top/v1",
+      "apiKey": "sk-your-anyrouter-key",
+      "headers": {
+        "Authorization": "Bearer sk-your-anyrouter-key"
+      }
+    }
+  }
+}
+```
+
+> 如果你使用本地插件文件，请将 `"opencode-anyrouter-cc"` 替换为你的相对路径（例如 `"./opencode-anthropic-tool-name-transformer.mjs"`）。
+
 ## 开发
 
 ```bash
