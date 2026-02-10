@@ -80,7 +80,7 @@ cp dist/index.js ~/.config/opencode/plugins/opencode-anyrouter-cc.js
 ```json
 {
   "plugin": [
-    "./opencode-anthropic-tool-name-transformer.mjs"
+    "opencode-anyrouter-cc"
   ],
   "anthropic": {
     "options": {

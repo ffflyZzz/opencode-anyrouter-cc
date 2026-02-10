@@ -80,7 +80,7 @@ Use either project-level `opencode.json` or global `~/.config/opencode/opencode.
 ```json
 {
   "plugin": [
-    "./opencode-anthropic-tool-name-transformer.mjs"
+    "opencode-anyrouter-cc"
   ],
   "anthropic": {
     "options": {
