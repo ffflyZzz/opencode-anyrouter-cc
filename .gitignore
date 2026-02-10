@@ -1,0 +1,35 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+.env
+.env.local
+coverage/
+.nyc_output/
+.eslintcache
+.bun/
+.bun.lockb
+.memory/
+
+# Claude Code
+.claude.json
+.claude.json.backup.*
+history.jsonl
+settings.json
+debug/
+plans/
+projects/
+session-env/
+shell-snapshots/
+todos/
+plugins/
+teams/
+
+# Original script (replaced by src/index.ts)
+opencode-anyrouter-cc.mjs
+
+# Template (reference only)
+opencode-plugin-template/
+
+# Local history
+file-history/
