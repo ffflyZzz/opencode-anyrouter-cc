@@ -299,11 +299,16 @@ function patchFetch(): void {
 }
 
 // ============================================================
+// Monkey-patch at import time (same as .mjs approach)
+// ============================================================
+
+patchFetch();
+
+// ============================================================
 // Plugin Export
 // ============================================================
 
 export const AnthropicToolNameTransformerPlugin: Plugin = async () => {
-  patchFetch();
   return {};
 };
 
