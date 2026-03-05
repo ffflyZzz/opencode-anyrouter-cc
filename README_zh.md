@@ -39,17 +39,22 @@ OpenCode 使用小写的工具名，但 AnyRouter 的 Claude API 需要正确的
 git clone <repo-url> opencode-anyrouter-cc
 cd opencode-anyrouter-cc
 bun install
-mise run build
-mise run link
+bun run build
 ```
 
-这会在 `~/.config/opencode/plugin/opencode-anyrouter-cc.js` 创建符号链接。
+输出到 `dist/index.js`，在 `opencode.json` 中直接引用路径即可：
+
+```json
+{
+  "plugin": ["/path/to/opencode-anyrouter-cc/dist/index.js"]
+}
+```
 
 ### 方式二：全局插件目录
 
 ```bash
 bun install
-mise run build
+bun run build
 cp dist/index.js ~/.config/opencode/plugins/opencode-anyrouter-cc.js
 ```
 
@@ -115,6 +120,26 @@ cp dist/index.js ~/.config/opencode/plugins/opencode-anyrouter-cc.js
 > 如果你使用本地插件文件，请将 `"opencode-anyrouter-cc"` 替换为你的相对路径（例如 `"./opencode-anthropic-tool-name-transformer.mjs"`）。
 
 ## 开发
+
+> **注意**：`mise.toml` 仅供维护者本地使用，Windows 用户及普通贡献者无需安装 mise。
+
+### 使用 Bun 构建（跨平台）
+
+```bash
+bun install
+bun run build
+```
+
+### 使用 Node.js + npm 构建（跨平台）
+
+```bash
+npm install
+npm run build
+```
+
+> 两种方式均输出到 `dist/index.js`。
+
+### 使用 mise 构建（仅限 macOS / Linux）
 
 ```bash
 bun install          # 安装依赖

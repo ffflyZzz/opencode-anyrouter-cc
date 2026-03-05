@@ -1,6 +1,6 @@
 {
   "name": "opencode-anyrouter-cc",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "OpenCode plugin for using AnyRouter as a Claude API provider, fixes tool name casing and array serialization issues",
   "keywords": [
     "opencode",

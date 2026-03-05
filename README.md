@@ -39,17 +39,22 @@ Fixes an issue where arrays/objects in `tool_use` input fields are serialized as
 git clone <repo-url> opencode-anyrouter-cc
 cd opencode-anyrouter-cc
 bun install
-mise run build
-mise run link
+bun run build
 ```
 
-This creates a symlink at `~/.config/opencode/plugin/opencode-anyrouter-cc.js`.
+This outputs `dist/index.js`. You can then reference it directly in `opencode.json`:
+
+```json
+{
+  "plugin": ["/path/to/opencode-anyrouter-cc/dist/index.js"]
+}
+```
 
 ### Option 2: Global Plugin Directory
 
 ```bash
 bun install
-mise run build
+bun run build
 cp dist/index.js ~/.config/opencode/plugins/opencode-anyrouter-cc.js
 ```
 
@@ -115,6 +120,26 @@ Use either project-level `opencode.json` or global `~/.config/opencode/opencode.
 > If you use a local plugin file, replace `"opencode-anyrouter-cc"` with your relative path (for example `"./opencode-anthropic-tool-name-transformer.mjs"`).
 
 ## Development
+
+> **Note**: `mise.toml` is only for the maintainer's local toolchain. Windows users and general contributors do not need mise.
+
+### Build with Bun (cross-platform)
+
+```bash
+bun install
+bun run build
+```
+
+### Build with Node.js + npm (cross-platform)
+
+```bash
+npm install
+npm run build
+```
+
+> Both commands output to `dist/index.js`.
+
+### Build with mise (macOS / Linux only)
 
 ```bash
 bun install          # Install dependencies

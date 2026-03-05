@@ -33,9 +33,16 @@ interface Message {
   [key: string]: unknown;
 }
 
+interface SystemBlock {
+  type?: string;
+  text?: string;
+  [key: string]: unknown;
+}
+
 interface RequestBody {
   tools?: ToolDefinition[];
   messages?: Message[];
+  system?: SystemBlock[];
   [key: string]: unknown;
 }
 
@@ -98,6 +105,16 @@ function transformRequestBody(body: RequestBody): RequestBody {
         }
       });
     });
+  }
+
+  // Ensure system array has exactly 2 elements (required by AnyRouter)
+  if (Array.isArray(body.system)) {
+    while (body.system.length < 2) {
+      body.system.push({ type: 'text', text: '.' });
+    }
+    while (body.system.length > 2) {
+      body.system.splice(1, 1);
+    }
   }
 
   return body;
