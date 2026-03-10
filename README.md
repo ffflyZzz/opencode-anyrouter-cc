@@ -15,7 +15,8 @@ OpenCode uses lowercase tool names, but AnyRouter's Claude API requires correct 
 | `todowrite` | `TodoWrite` |
 | `webfetch` | `WebFetch` |
 | `google_search` | `Google_Search` |
-| Other names | First letter capitalized |
+| `read`, `bash`, `edit`, etc. | `Read`, `Bash`, `Edit`, etc. |
+| MCP tools (e.g. `grep_app_searchGitHub`) | Unchanged |
 
 Transformation covers:
 - **Request body**: `tools[].name` and `messages[].content[].name` (tool_use blocks)
