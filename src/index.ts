@@ -67,16 +67,42 @@ interface SSEData {
 // Tool Name Mapping
 // ============================================================
 
+// OpenCode 内置工具名白名单（全小写 → 正确大小写）
+// 参考：https://github.com/anomalyco/opencode/tree/dev/packages/opencode/src/tool
 const NAME_MAP: ToolNameMap = {
+  // 需要特殊大小写的内置工具
   todowrite: 'TodoWrite',
+  todoread: 'TodoRead',
   webfetch: 'WebFetch',
   google_search: 'Google_Search',
+  apply_patch: 'Apply_patch',
+  // 单词内置工具（首字母大写）
+  bash: 'Bash',
+  batch: 'Batch',
+  codesearch: 'Codesearch',
+  edit: 'Edit',
+  glob: 'Glob',
+  grep: 'Grep',
+  invalid: 'Invalid',
+  ls: 'Ls',
+  lsp: 'Lsp',
+  multiedit: 'Multiedit',
+  plan: 'Plan',
+  question: 'Question',
+  read: 'Read',
+  skill: 'Skill',
+  task: 'Task',
+  websearch: 'Websearch',
+  write: 'Write',
 };
 
 function mapName(name: string | undefined | null): string | undefined | null {
   if (!name || typeof name !== 'string') return name;
   if (NAME_MAP[name]) return NAME_MAP[name];
-  return name.charAt(0).toUpperCase() + name.slice(1);
+  // 不在白名单中的工具名保持原样（MCP 工具等），不做任何大小写转换。
+  // MCP 工具名已包含正确大小写（如 grep_app_searchGitHub、context7_resolve-library-id），
+  // 盲目转换会导致工具调用失败。
+  return name;
 }
 
 function isMessagesEndpoint(url: string): boolean {
@@ -330,3 +356,9 @@ export const AnthropicToolNameTransformerPlugin: Plugin = async () => {
 };
 
 export default AnthropicToolNameTransformerPlugin;
+
+// ============================================================
+// 测试导出（仅供单元测试使用）
+// ============================================================
+
+export { NAME_MAP, mapName };
