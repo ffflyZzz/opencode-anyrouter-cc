@@ -1,11 +1,12 @@
 /**
- * OpenCode Plugin: Anthropic Tool Name Transformer
+ * OpenCode Plugin: Anthropic Tool Name Transformer + AnyRouter Compatibility
  *
- * Converts Anthropic API tool names from lowercase to PascalCase in requests,
- * and fixes arrays serialized as strings in responses.
+ * 功能：
+ * 1. 将 OpenCode 小写工具名转为 PascalCase（白名单策略）
+ * 2. 修复 AnyRouter 返回的数组序列化问题
+ * 3. 伪装请求为 Claude CLI 格式（headers + body），绕过 AnyRouter 校验
  *
- * Mechanism: monkey-patches globalThis.fetch at plugin load time,
- * intercepting only /v1/messages requests for transformation.
+ * 机制：monkey-patch globalThis.fetch，仅拦截 /v1/messages 请求
  */
 
 import type { Plugin } from '@opencode-ai/plugin';
@@ -36,6 +37,7 @@ interface Message {
 interface SystemBlock {
   type?: string;
   text?: string;
+  cache_control?: { type: string };
   [key: string]: unknown;
 }
 
@@ -43,6 +45,9 @@ interface RequestBody {
   tools?: ToolDefinition[];
   messages?: Message[];
   system?: SystemBlock[];
+  thinking?: { type: string; budget_tokens?: number };
+  max_tokens?: number;
+  metadata?: Record<string, unknown>;
   [key: string]: unknown;
 }
 
@@ -61,6 +66,47 @@ interface SSEData {
   type?: string;
   content_block?: SSEContentBlock;
   [key: string]: unknown;
+}
+
+// ============================================================
+// Constants: AnyRouter 兼容性配置
+// ============================================================
+
+// Claude CLI 伪装版本号
+const CLI_VERSION = '2.1.77';
+const CLI_BUILD = '7b9';
+const CLI_ENTRYPOINT = 'sdk-cli';
+const CLI_CCH = '8ffaf';
+
+// AnyRouter 校验必需的 headers
+const REQUIRED_HEADERS: Record<string, string> = {
+  'User-Agent': `claude-cli/${CLI_VERSION} (external, ${CLI_ENTRYPOINT})`,
+  Accept: 'application/json',
+  'anthropic-beta':
+    'claude-code-20250219,context-1m-2025-08-07,interleaved-thinking-2025-05-14,' +
+    'context-management-2025-06-27,prompt-caching-scope-2026-01-05,effort-2025-11-24',
+  'anthropic-dangerous-direct-browser-access': 'true',
+  'x-app': 'cli',
+};
+
+// billing header 内容（必须作为 system[0]）
+const BILLING_TEXT =
+  `x-anthropic-billing-header: cc_version=${CLI_VERSION}.${CLI_BUILD}; ` +
+  `cc_entrypoint=${CLI_ENTRYPOINT}; cch=${CLI_CCH};`;
+
+// 生成符合 AnyRouter 校验的 user_id
+// 格式：user_<64位hex>_account__session_<UUID>
+function generateUserId(): string {
+  const randomHex = (len: number) => {
+    const bytes = new Uint8Array(Math.ceil(len / 2));
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes, (b) => b.toString(16).padStart(2, '0'))
+      .join('')
+      .slice(0, len);
+  };
+  const hex64 = randomHex(64);
+  const uuid = `${randomHex(8)}-${randomHex(4)}-${randomHex(4)}-${randomHex(4)}-${randomHex(12)}`;
+  return `user_${hex64}_account__session_${uuid}`;
 }
 
 // ============================================================
@@ -106,16 +152,98 @@ function mapName(name: string | undefined | null): string | undefined | null {
 }
 
 function isMessagesEndpoint(url: string): boolean {
-  return typeof url === 'string' && url.includes('/v1/messages');
+  try {
+    const parsed = new URL(url);
+    // 精确匹配 pathname: /v1/messages（不匹配 /v1/messages-old 等）
+    return parsed.pathname === '/v1/messages' || parsed.pathname.endsWith('/v1/messages');
+  } catch {
+    // URL 无法解析时退回字符串匹配（兼容相对路径等极端情况）
+    return typeof url === 'string' && /\/v1\/messages(?:\?|$)/.test(url);
+  }
 }
 
 // ============================================================
-// Request Transform
+// URL Transform: 追加 ?beta=true
 // ============================================================
+
+function transformUrl(url: string): string {
+  // 使用 URL API 安全地处理 query 参数
+  try {
+    const parsed = new URL(url);
+    if (!parsed.searchParams.has('beta')) {
+      parsed.searchParams.set('beta', 'true');
+    }
+    return parsed.toString();
+  } catch {
+    // 退回字符串拼接（兼容无法解析的 URL）
+    if (url.includes('?')) {
+      if (!url.includes('beta=true')) return `${url}&beta=true`;
+      return url;
+    }
+    return `${url}?beta=true`;
+  }
+}
+
+// ============================================================
+// Headers Transform: 伪装为 Claude CLI
+// ============================================================
+
+function transformHeaders(headers: Headers): Headers {
+  const next = new Headers(headers);
+
+  // 移除 OpenCode 特有的 x-api-key（AnyRouter 拒绝此 header）
+  next.delete('x-api-key');
+
+  // 覆盖/添加 AnyRouter 必需的 headers
+  for (const [key, value] of Object.entries(REQUIRED_HEADERS)) {
+    next.set(key, value);
+  }
+
+  // 移除 content-length（body 已被修改，由 runtime 重新计算）
+  next.delete('content-length');
+
+  return next;
+}
+
+// ============================================================
+// Request Body Transform
+// ============================================================
+
+
+/**
+ * system 数组规范化：确保 billing header 在 [0]，总共恰好 3 个元素。
+ *
+ * 策略：
+ * 1. 从原数组中剥离已有的 billing block（如果存在）
+ * 2. 构造新数组：[billing, ...content_blocks]
+ * 3. 保留原始 content blocks 的最后 2 个（通常是 system prompt 核心内容）
+ * 4. 不足时用占位元素补齐
+ */
+function normalizeSystemBlocks(system: SystemBlock[]): SystemBlock[] {
+  const billing: SystemBlock = { type: 'text', text: BILLING_TEXT };
+  const placeholder: SystemBlock = { type: 'text', text: '.', cache_control: { type: 'ephemeral' } };
+
+  // 剥离已有的 billing block
+  const contentBlocks = system.filter(
+    (block) => !(typeof block.text === 'string' && block.text.includes('x-anthropic-billing-header'))
+  );
+
+  // 保留最后 2 个 content blocks（如果有）
+  const kept =
+    contentBlocks.length <= 2 ? contentBlocks : contentBlocks.slice(contentBlocks.length - 2);
+
+  // 组装：[billing, block1, block2]，不足时补占位元素
+  const result: SystemBlock[] = [billing, ...kept];
+  while (result.length < 3) {
+    result.push({ ...placeholder });
+  }
+  return result;
+}
 
 function transformRequestBody(body: RequestBody): RequestBody {
   if (!body || typeof body !== 'object') return body;
 
+  // --- 工具名转换 ---
   if (Array.isArray(body.tools)) {
     body.tools.forEach((tool) => {
       if (tool?.name) tool.name = mapName(tool.name) ?? tool.name;
@@ -133,14 +261,20 @@ function transformRequestBody(body: RequestBody): RequestBody {
     });
   }
 
-  // Ensure system array has exactly 2 elements (required by AnyRouter)
-  if (Array.isArray(body.system)) {
-    while (body.system.length < 2) {
-      body.system.push({ type: 'text', text: '.' });
-    }
-    while (body.system.length > 2) {
-      body.system.splice(1, 1);
-    }
+  // --- system 数组规范化：确保 billing 在 [0]，恰好 3 个元素 ---
+  body.system = normalizeSystemBlocks(Array.isArray(body.system) ? body.system : []);
+
+  // --- thinking：强制设为 adaptive（AnyRouter 不接受 enabled+budget_tokens，也要求存在） ---
+  body.thinking = { type: 'adaptive' };
+
+  // --- max_tokens：AnyRouter 需要 64000 ---
+  body.max_tokens = 64000;
+
+  // --- metadata：AnyRouter 必需，确保 user_id 存在且格式正确 ---
+  if (!body.metadata || typeof body.metadata !== 'object') {
+    body.metadata = { user_id: generateUserId() };
+  } else if (!body.metadata.user_id) {
+    body.metadata.user_id = generateUserId();
   }
 
   return body;
@@ -222,7 +356,7 @@ function transformSSEBody(stream: ReadableStream<Uint8Array>): ReadableStream<Ui
         const transformed = buffer.split('\n').map(transformSSELine).join('\n');
         controller.enqueue(encoder.encode(`${transformed}\n\n`));
       },
-    }),
+    })
   );
 }
 
@@ -237,11 +371,12 @@ function cloneResponseHeaders(headers: Headers): Headers {
 // ============================================================
 
 function patchFetch(): void {
+  // 幂等保护：避免重复加载时多层包裹
+  if ((globalThis.fetch as unknown as Record<string, boolean>).__anyrouter_patched) return;
   const _originalFetch = globalThis.fetch;
-
   globalThis.fetch = async function patchedFetch(
     input: RequestInfo | URL,
-    init?: RequestInit,
+    init?: RequestInit
   ): Promise<Response> {
     // Extract URL
     const url =
@@ -260,9 +395,12 @@ function patchFetch(): void {
       return _originalFetch(input, init);
     }
 
+    // --- Transform URL: 追加 ?beta=true ---
+    const transformedUrl = transformUrl(url);
+
     // --- Transform request body ---
-    let actualInput: RequestInfo | URL = input;
-    let actualInit: RequestInit | undefined = init;
+    let actualInit: RequestInit = { ...(init || {}) };
+    let requestHeaders: Headers;
 
     try {
       let bodyText = '';
@@ -277,33 +415,24 @@ function patchFetch(): void {
       if (bodyText) {
         const parsed: RequestBody = JSON.parse(bodyText);
         const transformed = transformRequestBody(parsed);
-        const newBody = JSON.stringify(transformed);
-
-        if (input instanceof Request) {
-          // Rebuild Request with new body
-          const newHeaders = new Headers(input.headers);
-          newHeaders.delete('content-length');
-          actualInput = new Request(input, {
-            body: newBody,
-            headers: newHeaders,
-          });
-          actualInit = undefined;
-        } else {
-          // input is string/URL, body is in init
-          actualInit = { ...init, body: newBody };
-          if (actualInit.headers) {
-            const h = new Headers(actualInit.headers as HeadersInit);
-            h.delete('content-length');
-            actualInit.headers = h;
-          }
-        }
+        actualInit.body = JSON.stringify(transformed);
       }
     } catch {
-      // JSON parse failure: send as-is
+      // JSON parse failure: send body as-is
     }
 
-    // --- Send request ---
-    const response = await _originalFetch(actualInput, actualInit);
+    // --- Transform headers: 伪装为 Claude CLI ---
+    if (input instanceof Request) {
+      requestHeaders = transformHeaders(new Headers(input.headers));
+    } else if (init?.headers) {
+      requestHeaders = transformHeaders(new Headers(init.headers as HeadersInit));
+    } else {
+      requestHeaders = transformHeaders(new Headers());
+    }
+    actualInit.headers = requestHeaders;
+
+    // --- Send request with transformed URL ---
+    const response = await _originalFetch(transformedUrl, actualInit);
 
     // --- Transform response ---
     const contentType = response.headers.get('content-type') || '';
@@ -339,6 +468,7 @@ function patchFetch(): void {
 
     return response;
   };
+  (globalThis.fetch as unknown as Record<string, boolean>).__anyrouter_patched = true;
 }
 
 // ============================================================
@@ -361,4 +491,4 @@ export default AnthropicToolNameTransformerPlugin;
 // 测试导出（仅供单元测试使用）
 // ============================================================
 
-export { NAME_MAP, mapName };
+export { NAME_MAP, mapName, transformRequestBody, transformUrl, transformHeaders };
