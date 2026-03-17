@@ -15,7 +15,8 @@ OpenCode 使用小写的工具名，但 AnyRouter 的 Claude API 需要正确的
 | `todowrite` | `TodoWrite` |
 | `webfetch` | `WebFetch` |
 | `google_search` | `Google_Search` |
-| 其他名称 | 首字母大写 |
+| `read`、`bash`、`edit` 等 | `Read`、`Bash`、`Edit` 等 |
+| MCP 工具（如 `grep_app_searchGitHub`） | 保持不变 |
 
 转换覆盖范围：
 - **请求体**：`tools[].name` 和 `messages[].content[].name`（tool_use 块）
